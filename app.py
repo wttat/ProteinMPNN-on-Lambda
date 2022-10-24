@@ -16,6 +16,11 @@ import os.path
 import subprocess
 from protein_mpnn_utils import loss_nll, loss_smoothed, gather_edges, gather_nodes, gather_nodes_t, cat_neighbors_nodes, _scores, _S_to_seq, tied_featurize, parse_PDB
 from protein_mpnn_utils import StructureDataset, StructureDatasetPDB, ProteinMPNN
+
+import boto3
+s3 = boto3.client('s3')
+bucket = os.environ['S3_BUCKET']
+
 def main(args):
 
     if args.seed:
@@ -372,13 +377,23 @@ def main(args):
                 num_seqs = len(temperatures)*NUM_BATCHES*BATCH_COPIES
                 total_length = X.shape[1]
                 print(f'{num_seqs} sequences of length {total_length} generated in {dt} seconds')
-    print("version:2")
     return None
 
 
 def lambda_handler(event, context):
-    print("version:2")
-    print("Current working directory: {0}".format(os.getcwd()))
+    print("version:3")
+
+    pdb_path = event['pdb_path']
+    pdb_path_chains = event['pdb_path_chains']
+    num_seq_per_target = event['num_seq_per_target']
+    sampling_temp = event['sampling_temp']
+    seed = event['seed']
+    batch_size = ['batch_size']
+
+    prefix = 'inputs/'
+    key = prefix+pdb_path
+    s3.download_file(bucket, key, pdb_path)
+
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
  
     argparser.add_argument("--ca_only", action="store_true", default=False, help="Parse CA-only structures and use CA-only models (default: false)")   
@@ -421,15 +436,13 @@ def lambda_handler(event, context):
     
     argparser.add_argument("--tied_positions_jsonl", type=str, default='', help="Path to a dictionary with tied positions")
     
-    args = argparser.parse_args(['--pdb_path','relaxed_model_1_pred_0.pdb','--pdb_path_chains','A','--out_folder','/tmp/output','--num_seq_per_target', '100','--sampling_temp','0.1']) 
+    args = argparser.parse_args(['--pdb_path',pdb_path,'--pdb_path_chains',pdb_path_chains,'--out_folder','/tmp/output','--num_seq_per_target', num_seq_per_target,'--sampling_temp',sampling_temp]) 
+
     main(args)
     
     print("proteinmpnn done")
 
     return {
         "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json"
-        },
         "body": "ok"
     }
